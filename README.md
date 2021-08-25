@@ -44,7 +44,7 @@ let (_i2c, enable) = color_controller.release();
 static mut DMA_BUFFER: [u8; 256] = [0; 256];
 let interface = LP50xx::init_with_callback(Model::LP5012, en, |addr, data| unsafe {
     // Copy the data from the LP50xx into the DMA buffer for processing
-    DMA_BUFFER[0..data.len() - 1].copy_from_slice(data);
+    DMA_BUFFER[0..data.len()].copy_from_slice(data);
 })
 .into_monochromatic_mode();
 ```

@@ -5,11 +5,12 @@
 #![deny(warnings)]
 
 use core::marker::PhantomData;
+use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::digital::v2::OutputPin;
 
 #[derive(Debug)]
 pub enum Error {
-    /// Communication Error with blocking I2C
+    /// Generic communication Error with blocking I2C
     CommError,
     /// Neither the I2C or asynchronous transfer callback defined
     NoInterfaceDefined,
@@ -18,6 +19,7 @@ pub enum Error {
 }
 
 /// Supported Texas Instruments LP50XX models
+#[derive(Clone, Copy)]
 pub enum Model {
     /// 9 pin controller
     LP5009,
@@ -27,7 +29,7 @@ pub enum Model {
 
 impl Model {
     /// Get the pin count for the Model
-    fn get_pin_count(&mut self) -> u8 {
+    fn get_pin_count(&self) -> u8 {
         match *self {
             Model::LP5009 => 9,
             Model::LP5012 => 12,
@@ -36,6 +38,7 @@ impl Model {
 }
 
 /// The chip select communication address
+/// The addressing is 7bit
 #[derive(Clone, Copy)]
 pub enum Address {
     /// Broadcast the transferred data to all LP50XX chips on the I2C bus
@@ -48,28 +51,22 @@ pub enum Address {
 impl Address {
     /// Return the u8 payload data for the address specifier, this data can sent down the wire to the LP50XX to
     /// specifiy the desired chip
-    pub fn into_u8(&self) -> u8 {
+    /// NOTE: The directional bit is not included in the addressing and should be included in the i2c driver implementation
+    pub fn into_u8(self) -> u8 {
         match self {
-            Address::Broadcast => 0x0C,
             Address::Independent(address) => {
-                if *address > 4 {
-                    panic!("LP50XX only supports 3 dedicated addresses, 0b00, 0b01, 0b10 or 0b11")
+                if address > 3 {
+                    panic!("LP50XX only supports 4 dedicated addresses, 0b00, 0b01, 0b10 or 0b11")
                 }
-                return 0b00001100 | address;
+                return 0b00010100 | address;
             }
+            Address::Broadcast => 0b0001100,
         }
     }
 }
 
-/// Basic or default API for the LP50XX.
-/// This currently does nothing and the user must choose either the ColorMode or MonochromaticMode APIs.
-pub struct BasicMode {}
-
-impl BasicMode {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
+/// Default Mode
+pub struct DefaultMode {}
 
 /// ColorMode allows the user to configure the LEDs in fashion that is suitable if the LED supports RGB
 pub struct ColorMode {}
@@ -96,7 +93,7 @@ pub struct LP50xx<MODE, I2C, EN> {
     enable: EN,
     /// Asynchronous transfer callback, useful for transferring data to a static DMA buffer or queue
     /// When the blocking I2C interface is provided, this transfer_callback value is ignored
-    transfer_callback: Option<fn(address: Address, data: &[u8])>,
+    transfer_callback: Option<fn(addr: Address, data: &[u8])>,
     /// Continuous addressing allows intuitive numbering of banks/leds when multiple LP50XX chips are used
     /// in a daisy-chain configuration. For example, for the LP5009 if specifying the 9th led, the address will be 0x00
     /// but when specifying the 10th led, the address will be 0x01 (the next chip address)
@@ -109,9 +106,17 @@ pub struct LP50xx<MODE, I2C, EN> {
     model: Model,
 }
 
-impl<I2C, EN> LP50xx<BasicMode, I2C, EN> {
+impl<I2C, EN> LP50xx<DefaultMode, I2C, EN>
+where
+    EN: OutputPin,
+{
     /// Initialize the LP50xx with a dedicated blocking i2c interface
-    pub fn init_with_i2c(model: Model, i2c: I2C, en: EN) -> Self {
+    /// * `model` - The model of the LP50xx
+    /// * `i2c` - I2C interface for blocking tranmission
+    /// * `en` - The enable line
+    pub fn init_with_i2c(model: Model, i2c: I2C, mut en: EN) -> Self {
+        en.set_low().ok();
+
         Self {
             interface: Some(i2c),
             enable: en,
@@ -124,11 +129,16 @@ impl<I2C, EN> LP50xx<BasicMode, I2C, EN> {
     }
 
     /// Initialize the LP50xx with a flexible asynchronous callback interface
+    /// * `model` - The model of the LP50xx
+    /// * `en` - The enable line
+    /// * `callback` - Callback for custom transmission of the address and dataframe.
     pub fn init_with_callback(
         model: Model,
-        en: EN,
-        callback: fn(address: Address, data: &[u8]),
+        mut en: EN,
+        callback: fn(addr: Address, data: &[u8]),
     ) -> Self {
+        en.set_low().ok();
+
         Self {
             interface: None,
             enable: en,
@@ -141,11 +151,13 @@ impl<I2C, EN> LP50xx<BasicMode, I2C, EN> {
     }
 
     /// Set continuous addressing
+    /// * `state` - Continuous addressing enable
     pub fn set_continuous_addressing(&mut self, state: bool) {
         self.continuous_addressing = state;
     }
 
     /// Set the active chip address: Broadcast, 0b00, 0b01, 0b10 or 0b11.
+    /// * `address` - Address of the active LP50xx
     pub fn set_active_address(&mut self, address: Address) {
         self.active_address = address;
     }
@@ -158,7 +170,7 @@ impl<I2C, EN> LP50xx<BasicMode, I2C, EN> {
 
 impl<MODE, I2C, EN> LP50xx<MODE, I2C, EN>
 where
-    I2C: embedded_hal::blocking::i2c::Write,
+    I2C: embedded_hal::blocking::i2c::Write<u8>,
     EN: OutputPin,
 {
     /// Configure the LP50xx to be in color mode, which is most suitable if the target LEDs support RGB
@@ -187,6 +199,8 @@ where
     /// Write data to the desired interface. If the i2C interface is provided,
     /// it will perform a blocking call to I2C and return the result,
     /// if I2C is not provided, then the asynchronous transfer callback is executed
+    /// * `addr` - Address of the LP50xx
+    /// * `data` - The data payload to be sent
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
         // If there is an i2c interface provided, utilize it in a blocking fashion
         if self.interface.is_some() {
@@ -206,16 +220,43 @@ where
         return Err(Error::NoInterfaceDefined);
     }
 
-    /// Enable the LP50xx, this must be executed prior to any commands sent to the LP50xx
-    pub fn enable(&mut self) -> Result<(), Error> {
+    /// Reset the LP50xx
+    /// Currently resetting is only available for Broadcast
+    /// * `delay` - delay provider
+    pub fn reset<DELAY>(&mut self, delay: &mut DELAY) -> Result<(), Error>
+    where
+        DELAY: DelayMs<u8>,
+    {
+        self.write(Address::Broadcast, &[0x17, 0xff])?;
+        delay.delay_ms(1);
         self.enable.set_low().map_err(|_| Error::EnableLine)?;
+        delay.delay_ms(10);
         self.enable.set_high().map_err(|_| Error::EnableLine)?;
+        delay.delay_ms(10);
+        Ok(())
+    }
 
+    /// Enable the LP50xx, this must be executed prior to any commands sent to the LP50xx
+    /// * `delay` - delay provider
+    pub fn enable<DELAY>(&mut self, delay: &mut DELAY) -> Result<(), Error>
+    where
+        DELAY: DelayMs<u8>,
+    {
+        self.enable.set_low().map_err(|_| Error::EnableLine)?;
+        delay.delay_ms(1);
+        self.enable.set_high().map_err(|_| Error::EnableLine)?;
+        delay.delay_ms(10);
         self.write(Address::Broadcast, &[0x00, 0b01000000])
     }
 
     /// Configure the LP50xx. For information regarding each of these settings, please consult the datasheet.
     /// Currently configuring is only available for Broadcast
+    /// * `log_scale` - Logarithmic scale dimming curve
+    /// * `power_save` - Automatic power-saving mode enabled
+    /// * `auto_incr` - The auto-increment feature allows writing or reading several consecutive registers within one transmission.
+    /// * `pwm_dithering` - PWM dithering mode enabled
+    /// * `max_current_option` - Output maximum current enable: IMAX = 35 mA, disable: IMAX = 25.5mA
+    /// * `global_off` - Shut down all LEDs when enabled
     pub fn configure(
         &mut self,
         log_scale: bool,
@@ -235,15 +276,6 @@ where
 
         self.write(Address::Broadcast, &[0x01, value])
     }
-
-    /// Reset the LP50xx
-    /// Currently resetting is only available for Broadcast
-    pub fn reset(&mut self) -> Result<(), Error> {
-        self.write(Address::Broadcast, &[0x17, 0xff])?;
-        self.enable.set_low().map_err(|_| Error::EnableLine)?;
-        self.enable.set_high().map_err(|_| Error::EnableLine)?;
-        Ok(())
-    }
 }
 
 // Color Mode
@@ -256,10 +288,14 @@ where
     /// Set the channel brightness and RGB values
     pub fn set(
         &mut self,
-        channel: u8,
+        mut channel: u8,
         (brightness, [r, g, b]): (u8, [u8; 3]),
     ) -> Result<(), Error> {
-        // TODO: Continuous Addressing feature
+        if channel < 1 {
+            panic!("Specified Channel index must be greater than 0");
+        }
+
+        channel = channel - 1;
 
         let bright_addr = 0x07 + channel as u8;
         let color_addr = 0x0b + (channel as u8) * 3;
@@ -277,30 +313,62 @@ where
     EN: OutputPin,
 {
     /// Set the desired LED value
+    /// * `led` - the LED index beginning at 1
+    /// * `value` - luminosity value
     pub fn set(&mut self, led: u8, value: u8) -> Result<(), Error> {
-        if !self.continuous_addressing && led > self.model.get_pin_count() - 1 {
+        if led == 0 {
+            panic!("Specified LED index must be greater than 0");
+        }
+        if !self.continuous_addressing && led > self.model.get_pin_count() {
             panic!("Specified LED is not supported");
         }
 
         // In monochromatic mode, brightness is no longer applicable
         let led_base_address = 0x0B;
 
-        let address = if self.continuous_addressing {
-            let pin_count = self.model.get_pin_count() - 1;
-            let offset = if led > pin_count && led < (pin_count * 2) {
-                0x01
-            } else if led >= (pin_count * 2) {
-                0x02
-            } else {
-                0x00
-            };
-
-            Address::Independent(offset)
+        let (address, pin_offset) = if self.continuous_addressing {
+            let addr_offset = get_led_address_offset(led, self.model);
+            let addr = Address::Independent(addr_offset);
+            let pin_offset = led - (addr_offset * self.model.get_pin_count());
+            (addr, pin_offset)
         } else {
-            self.active_address
+            (self.active_address, led)
         };
 
-        self.write(address, &[led_base_address + led, value])?;
+        self.write(address, &[led_base_address + (pin_offset - 1), value])?;
         Ok(())
+    }
+}
+
+/// Get the led offset address for the given led index and the model
+/// * `led_index` - the LED index beginning at 1
+/// * `model` - Model number of the LP50xx
+fn get_led_address_offset(led_index: u8, model: Model) -> u8 {
+    let length = model.get_pin_count();
+
+    if led_index <= length {
+        return 0x00;
+    }
+    if led_index > length && led_index <= (length * 2) {
+        return 0x01;
+    }
+
+    return 0x02;
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn correct_led_address_offset() {
+        let offset = super::get_led_address_offset(1, super::Model::LP5012);
+        assert_eq!(offset, 0x00);
+        let offset = super::get_led_address_offset(12, super::Model::LP5012);
+        assert_eq!(offset, 0x00);
+        let offset = super::get_led_address_offset(13, super::Model::LP5012);
+        assert_eq!(offset, 0x01);
+        let offset = super::get_led_address_offset(24, super::Model::LP5012);
+        assert_eq!(offset, 0x01);
+        let offset = super::get_led_address_offset(25, super::Model::LP5012);
+        assert_eq!(offset, 0x02);
     }
 }

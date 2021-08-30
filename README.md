@@ -4,7 +4,7 @@ Embedded driver for the Texas Instruments LP5009 and LP5012 LED drivers
 - https://crates.io/crates/lp50xx
 
 ## description
-The LP50xx device is an 9- or 12-channel constantcurrent sink LED driver. The LP50xx device includes integrated color mixing and brightness control, and pre-configuration simplifies the software coding process. Integrated 12-bit, 29-kHz PWM generatorsfor each channel enable smooth, vivid color for LEDs, and eliminate audible noise.
+The LP50xx device is an 9- or 12-channel constant current sink LED driver. The LP50xx device includes integrated color mixing and brightness control, and pre-configuration simplifies the software coding process. Integrated 12-bit, 29-kHz PWM generators for each channel enable smooth, vivid color for LEDs, and eliminate audible noise.
 
 ## example
 Examples are based on the `stm32h7xx_hal`.

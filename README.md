@@ -4,7 +4,7 @@ Embedded driver for the Texas Instruments LP5009 and LP5012 LED drivers
 - https://crates.io/crates/lp50xx
 
 ## description
-The LP50xx device is an 9- or 12-channel constantcurrent sink LED driver. The LP50xx device includes integrated color mixing and brightness control, and pre-configuration simplifies the software coding process. Integrated 12-bit, 29-kHz PWM generatorsfor each channel enable smooth, vivid color for LEDs, and eliminate audible noise.
+The LP50xx device is an 9- or 12-channel constant current sink LED driver. The LP50xx device includes integrated color mixing and brightness control, and pre-configuration simplifies the software coding process. Integrated 12-bit, 29-kHz PWM generators for each channel enable smooth, vivid color for LEDs, and eliminate audible noise.
 
 ## example
 Examples are based on the `stm32h7xx_hal`.
@@ -34,19 +34,19 @@ let mut monochromatic_controller = interface.into_monochromatic_mode();
 // Enable it, this requires a delay provider
 monochromatic_controller.enable(delay).ok();
 // Set LED 5 to 255
-monchromatic_controller.set(5, 0xFF).ok();
+monochromatic_controller.set(5, 0xFF).ok();
 
 // The continuous addressing feature is enabled by default, allowing you to address
 // multiple LP50xx devices on the same bus in an intuitive way.
 // There are 12 LEDs available per LP5012, therefore the following command
 // will illuminate the 1st LED on the on the second LP5012:
-monchromatic_controller.set(13, 0xFF).ok();
+monochromatic_controller.set(13, 0xFF).ok();
 // You can turn this feature off and set the active address manually also:
-monchromatic_controller.set_continuous_addressing(false);
+monochromatic_controller.set_continuous_addressing(false);
 // Set the active address to be the second device
-monchromatic_controller.set_active_address(0x01);
+monochromatic_controller.set_active_address(0x01);
 // And then turn off the same 1st LED on the second device
-monchromatic_controller.set(1, 0x00).ok();
+monochromatic_controller.set(1, 0x00).ok();
 
 // Alternatively, if you are using RGB LEDs you can use the LP50xx in color mode
 let mut color_controller = monochromatic_controller.into_color_mode();

@@ -104,6 +104,8 @@ pub struct LP50xx<MODE, I2C, EN> {
     mode: PhantomData<MODE>,
     /// Model, can either be the LP5009 (9 pin) or LP5012 (12 pin)
     model: Model,
+    /// Brightness factor. Note: Only used for monochromatic mode.
+    brightness_factor: f32,
 }
 
 impl<I2C, EN> LP50xx<DefaultMode, I2C, EN>
@@ -125,6 +127,7 @@ where
             active_address: Address::Broadcast,
             continuous_addressing: true,
             mode: PhantomData,
+            brightness_factor: 1.0,
         }
     }
 
@@ -147,6 +150,7 @@ where
             active_address: Address::Broadcast,
             continuous_addressing: true,
             mode: PhantomData,
+            brightness_factor: 1.0,
         }
     }
 
@@ -193,6 +197,7 @@ where
             model: self.model,
             continuous_addressing: self.continuous_addressing,
             mode: PhantomData,
+            brightness_factor: 1.0,
         }
     }
 
@@ -312,6 +317,18 @@ where
     I2C: embedded_hal::blocking::i2c::Write,
     EN: OutputPin,
 {
+    /// Set the brightness factor which will dim the output
+    /// The maximum value is 1.0 (100%) and the minimum is 0.1 (10%)
+    /// * `factor` - Brightness factor
+    pub fn set_brightness_factor(&mut self, mut factor: f32) {
+        if factor < 0.1 {
+            factor = 0.1;
+        } else if factor > 1.0 {
+            factor = 1.0;
+        }
+        self.brightness_factor = factor;
+    }
+
     /// Set the desired LED value
     /// * `led` - the LED index beginning at 1
     /// * `value` - luminosity value
@@ -335,7 +352,9 @@ where
             (self.active_address, led)
         };
 
-        self.write(address, &[led_base_address + (pin_offset - 1), value])?;
+        let result = (value as f32 * self.brightness_factor) as u8;
+
+        self.write(address, &[led_base_address + (pin_offset - 1), result])?;
         Ok(())
     }
 }

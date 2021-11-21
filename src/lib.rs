@@ -365,7 +365,7 @@ where
 fn get_led_address_offset(led_index: u8, model: Model) -> u8 {
     let length = model.get_pin_count();
 
-    if led_index <= length {
+    if led_index <= length {    
         return 0x00;
     }
     if led_index > length && led_index <= (length * 2) {

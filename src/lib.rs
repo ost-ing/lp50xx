@@ -318,15 +318,20 @@ where
     EN: OutputPin,
 {
     /// Set the brightness factor which will dim the output
-    /// The maximum value is 1.0 (100%) and the minimum is 0.1 (10%)
+    /// The maximum value is 1.0 (100%) and the minimum is 0.01 (1%)
     /// * `factor` - Brightness factor
     pub fn set_brightness_factor(&mut self, mut factor: f32) {
-        if factor < 0.1 {
-            factor = 0.1;
+        if factor < 0.01 {
+            factor = 0.01;
         } else if factor > 1.0 {
             factor = 1.0;
         }
         self.brightness_factor = factor;
+    }
+
+    /// Get the configured brightness factor
+    pub fn brightness_factor(&self) -> f32 {
+        self.brightness_factor
     }
 
     /// Set the desired LED value
@@ -365,7 +370,7 @@ where
 fn get_led_address_offset(led_index: u8, model: Model) -> u8 {
     let length = model.get_pin_count();
 
-    if led_index <= length {    
+    if led_index <= length {
         return 0x00;
     }
     if led_index > length && led_index <= (length * 2) {

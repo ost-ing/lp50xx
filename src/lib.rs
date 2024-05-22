@@ -5,8 +5,8 @@
 #![deny(warnings)]
 
 use core::marker::PhantomData;
-use embedded_hal::blocking::delay::DelayMs;
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::delay::DelayNs;
+use embedded_hal::digital::OutputPin;
 
 #[derive(Debug)]
 pub enum Error {
@@ -174,7 +174,7 @@ where
 
 impl<MODE, I2C, EN> LP50xx<MODE, I2C, EN>
 where
-    I2C: embedded_hal::blocking::i2c::Write<u8>,
+    I2C: embedded_hal::i2c::I2c,
     EN: OutputPin,
 {
     /// Configure the LP50xx to be in color mode, which is most suitable if the target LEDs support RGB
@@ -230,7 +230,7 @@ where
     /// * `delay` - delay provider
     pub fn reset<DELAY>(&mut self, delay: &mut DELAY) -> Result<(), Error>
     where
-        DELAY: DelayMs<u8>,
+        DELAY: DelayNs,
     {
         self.write(Address::Broadcast, &[0x17, 0xff])?;
         delay.delay_ms(1);
@@ -245,7 +245,7 @@ where
     /// * `delay` - delay provider
     pub fn enable<DELAY>(&mut self, delay: &mut DELAY) -> Result<(), Error>
     where
-        DELAY: DelayMs<u8>,
+        DELAY: DelayNs,
     {
         self.enable.set_low().map_err(|_| Error::EnableLine)?;
         delay.delay_ms(1);
@@ -287,7 +287,7 @@ where
 
 impl<I2C, EN> LP50xx<ColorMode, I2C, EN>
 where
-    I2C: embedded_hal::blocking::i2c::Write,
+    I2C: embedded_hal::i2c::I2c,
     EN: OutputPin,
 {
     /// Set the channel brightness and RGB values
@@ -314,7 +314,7 @@ where
 
 impl<I2C, EN> LP50xx<MonochromaticMode, I2C, EN>
 where
-    I2C: embedded_hal::blocking::i2c::Write,
+    I2C: embedded_hal::i2c::I2c,
     EN: OutputPin,
 {
     /// Set the brightness factor which will dim the output

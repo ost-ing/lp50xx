@@ -1,14 +1,14 @@
 [package]
 name = "lp50xx"
-version = "0.0.4"
-authors = ["Oliver Stenning <code@ostenning.com>"]
+version = "0.0.5"
+authors = ["Oliver <18360865+ost-ing@users.noreply.github.com>"]
 edition = "2018"
 description = "A simple platform agnostic library for the Texas Instruments LP50XX led driver"
 keywords = ["embedded-hal", "driver", "led", "LP5012", "LP5009"]
 categories = ["embedded", "hardware-support", "no-std"]
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/ostenning/lp50xx"
+repository = "https://github.com/ost-ing/lp50xx"
 
 [dependencies]
 embedded-hal = { version = "0.2.4", features = ["unproven"] }
